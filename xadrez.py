@@ -163,27 +163,27 @@ class Rei(Peca):
 # --- CLASSE PRINCIPAL DO JOGO ---
 class Jogo:
     def __init__(self):
+        # (O conteúdo de __init__ não muda)
         self.tabuleiro = []
         self.peca_selecionada = None
         self.turno = 'w'
         self.movimentos_validos = []
         self.pos_rei_w = (7, 4)
         self.pos_rei_b = (0, 4)
-        # --- NOVO: Variáveis de fim de jogo ---
         self.game_over = False
         self.status_texto = ""
         self.criar_tabuleiro()
 
     def criar_tabuleiro(self):
+        # (Não muda)
         self.tabuleiro = [[None for _ in range(8)] for _ in range(8)]
-        # ... (código de posicionar as peças não muda)
         self.tabuleiro[0] = [Torre(0,0,'b'), Cavalo(0,1,'b'), Bispo(0,2,'b'), Rainha(0,3,'b'), Rei(0,4,'b'), Bispo(0,5,'b'), Cavalo(0,6,'b'), Torre(0,7,'b')]
         self.tabuleiro[1] = [Peao(1, i, 'b') for i in range(8)]
         self.tabuleiro[6] = [Peao(6, i, 'w') for i in range(8)]
         self.tabuleiro[7] = [Torre(7,0,'w'), Cavalo(7,1,'w'), Bispo(7,2,'w'), Rainha(7,3,'w'), Rei(7,4,'w'), Bispo(7,5,'w'), Cavalo(7,6,'w'), Torre(7,7,'w')]
 
     def desenhar_tudo(self, tela):
-        # ... (código de desenhar tabuleiro e peças não muda)
+        # (Não muda)
         for r in range(LINHAS):
             for c in range(COLUNAS):
                 cor = BRANCO_CASA if (r + c) % 2 == 0 else PRETO_CASA
@@ -205,7 +205,6 @@ class Jogo:
                 if peca is not None:
                     peca.desenhar(tela)
 
-        # --- NOVO: Desenha a mensagem de fim de jogo ---
         if self.game_over:
             texto_surface = FONTE_STATUS.render(self.status_texto, True, pygame.Color('black'))
             pos_x = LARGURA // 2 - texto_surface.get_width() // 2
@@ -238,28 +237,37 @@ class Jogo:
         return False
         
     def _mover(self, linha, coluna):
-        # (Não muda)
         if self.peca_selecionada and (linha, coluna) in self.movimentos_validos:
             pos_orig_l, pos_orig_c = self.peca_selecionada.linha, self.peca_selecionada.coluna
+            
             if isinstance(self.peca_selecionada, Rei):
                 if self.peca_selecionada.cor == 'w': self.pos_rei_w = (linha, coluna)
                 else: self.pos_rei_b = (linha, coluna)
+
             self.tabuleiro[linha][coluna] = self.peca_selecionada
             self.tabuleiro[pos_orig_l][pos_orig_c] = None
-            self.peca_selecionada.mover(linha, coluna)
+            peca_movida = self.peca_selecionada
+            peca_movida.mover(linha, coluna)
+            
+            # --- NOVO: Lógica de Promoção do Peão ---
+            if isinstance(peca_movida, Peao):
+                # Se um peão branco chega na linha 0 ou um peão preto na linha 7
+                if (peca_movida.cor == 'w' and linha == 0) or \
+                   (peca_movida.cor == 'b' and linha == 7):
+                    # Promove para uma Rainha
+                    self.tabuleiro[linha][coluna] = Rainha(linha, coluna, peca_movida.cor)
+            
             return True
         return False
 
     def trocar_turno(self):
+        # (Não muda)
         self.turno = 'b' if self.turno == 'w' else 'w'
-        # --- NOVO: Verificação de fim de jogo ---
         self.verificar_fim_de_jogo()
 
-    # --- NOVO MÉTODO ---
+    # (Todos os outros métodos como verificar_fim_de_jogo, _get_todos_movimentos_legais, etc. não mudam)
     def verificar_fim_de_jogo(self):
-        """ Verifica se o jogador do turno atual tem algum movimento legal. """
         todos_os_movimentos = self._get_todos_movimentos_legais(self.turno)
-        
         if len(todos_os_movimentos) == 0:
             self.game_over = True
             if self.is_in_check(self.turno):
@@ -268,9 +276,7 @@ class Jogo:
             else:
                 self.status_texto = "Empate por Afogamento!"
 
-    # --- NOVO MÉTODO ---
     def _get_todos_movimentos_legais(self, cor):
-        """ Retorna uma lista com todos os movimentos legais para uma cor. """
         todos_os_movimentos = []
         for r in range(LINHAS):
             for c in range(COLUNAS):
@@ -281,7 +287,6 @@ class Jogo:
                     todos_os_movimentos.extend(movimentos_legais_da_peca)
         return todos_os_movimentos
 
-    # --- Métodos de verificação de xeque (não mudam) ---
     def _filtrar_movimentos_ilegais(self, peca, movimentos):
         movimentos_legais = []
         for movimento in movimentos:
@@ -316,7 +321,6 @@ class Jogo:
         pos_rei = self.pos_rei_w if cor == 'w' else self.pos_rei_b
         cor_oponente = 'b' if cor == 'w' else 'w'
         return self.is_square_under_attack(pos_rei[0], pos_rei[1], cor_oponente)
-
 
 # --- LOOP PRINCIPAL ---
 def main():
