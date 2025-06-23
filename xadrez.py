@@ -416,31 +416,90 @@ class Jogo:
                     self._mover(movimento_aleatorio_fallback[0], movimento_aleatorio_fallback[1])
 
 
+# --- TELA INICIAL ---
+def tela_inicial(tela):
+    fonte_titulo = pygame.font.SysFont('Arial', 60, True)
+    fonte_botao = pygame.font.SysFont('Arial', 40)
+
+    titulo_texto = fonte_titulo.render("Jogo de Xadrez", True, pygame.Color('black'))
+    jvj_texto = fonte_botao.render("Jogador vs Jogador", True, pygame.Color('black'))
+    jvia_texto = fonte_botao.render("Jogador vs IA", True, pygame.Color('black'))
+
+    padding_botao = 15
+    largura_botao_jvj = jvj_texto.get_width() + 2 * padding_botao
+    altura_botao_jvj = jvj_texto.get_height() + 2 * padding_botao
+    largura_botao_jvia = jvia_texto.get_width() + 2 * padding_botao
+    altura_botao_jvia = jvia_texto.get_height() + 2 * padding_botao
+
+    botao_jvj_rect = pygame.Rect(LARGURA//2 - largura_botao_jvj//2, ALTURA//2 - altura_botao_jvj - 10, largura_botao_jvj, altura_botao_jvj)
+    botao_jvia_rect = pygame.Rect(LARGURA//2 - largura_botao_jvia//2, ALTURA//2 + 10, largura_botao_jvia, altura_botao_jvia)
+
+    cor_botao_normal = pygame.Color('lightgray')
+    cor_botao_hover = pygame.Color('darkgray')
+
+    rodando_tela_inicial = True
+    while rodando_tela_inicial:
+        mouse_pos = pygame.mouse.get_pos()
+        for evento in pygame.event.get():
+            if evento.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+            if evento.type == pygame.MOUSEBUTTONDOWN:
+                if botao_jvj_rect.collidepoint(mouse_pos):
+                    return False # Jogador vs Jogador (modo_ia = False)
+                if botao_jvia_rect.collidepoint(mouse_pos):
+                    return True  # Jogador vs IA (modo_ia = True)
+
+        tela.fill(pygame.Color('white')) # Fundo da tela inicial
+
+        # Desenha título
+        tela.blit(titulo_texto, (LARGURA//2 - titulo_texto.get_width()//2, ALTURA//4 - titulo_texto.get_height()//2))
+
+        # Desenha botões
+        cor_jvj = cor_botao_hover if botao_jvj_rect.collidepoint(mouse_pos) else cor_botao_normal
+        pygame.draw.rect(tela, cor_jvj, botao_jvj_rect, border_radius=10)
+        tela.blit(jvj_texto, (botao_jvj_rect.x + padding_botao, botao_jvj_rect.y + padding_botao))
+
+        cor_jvia = cor_botao_hover if botao_jvia_rect.collidepoint(mouse_pos) else cor_botao_normal
+        pygame.draw.rect(tela, cor_jvia, botao_jvia_rect, border_radius=10)
+        tela.blit(jvia_texto, (botao_jvia_rect.x + padding_botao, botao_jvia_rect.y + padding_botao))
+
+        pygame.display.flip()
+        pygame.time.Clock().tick(30)
+
+
 # --- LOOP PRINCIPAL ---
-# (Não muda)
 def main():
-    rodando, clock, jogo = True, pygame.time.Clock(), Jogo(modo_ia=True, cor_ia='b') # IA joga com as pretas por padrão
+    pygame.display.set_caption("Jogo de Xadrez") # Movido para cá para que a tela inicial também tenha
+
+    modo_ia_selecionado = tela_inicial(TELA)
+
+    rodando, clock, jogo = True, pygame.time.Clock(), Jogo(modo_ia=modo_ia_selecionado, cor_ia='b')
+
     while rodando:
         clock.tick(60)
 
-        turno_jogador_humano = jogo.turno != jogo.cor_ia or not jogo.modo_ia
+        turno_jogador_humano = True # Por padrão, é turno humano
+        if jogo.modo_ia and jogo.turno == jogo.cor_ia:
+            turno_jogador_humano = False
 
         for evento in pygame.event.get():
             if evento.type == pygame.QUIT:
                 rodando = False
             if not jogo.game_over and turno_jogador_humano:
                 if evento.type == pygame.MOUSEBUTTONDOWN:
-                    pos_x, pos_y = pygame.mouse.get_pos()
-                    linha, coluna = pos_y // TAMANHO_QUADRADO, pos_x // TAMANHO_QUADRADO
-                    if jogo.selecionar(linha, coluna): # selecionar agora retorna True se um movimento foi feito e o turno trocado
-                        # O turno já foi trocado dentro de selecionar (ou _mover que chama trocar_turno)
-                        pass
+                    # Certifica-se que o clique é do jogador humano e não da IA "clicando"
+                    if not (jogo.modo_ia and jogo.turno == jogo.cor_ia) :
+                        pos_x, pos_y = pygame.mouse.get_pos()
+                        linha, coluna = pos_y // TAMANHO_QUADRADO, pos_x // TAMANHO_QUADRADO
+                        if jogo.selecionar(linha, coluna):
+                            pass
 
         if not jogo.game_over and jogo.modo_ia and jogo.turno == jogo.cor_ia:
+            pygame.time.wait(500) # Pequeno delay para a IA não jogar instantaneamente
             jogo.fazer_movimento_ia()
-            # Se a IA fez um movimento, ela precisa trocar o turno e verificar fim de jogo
-            if not jogo.game_over: # A IA pode ter feito um movimento de xeque-mate
-                 jogo.trocar_turno() # trocar_turno já chama verificar_fim_de_jogo
+            if not jogo.game_over:
+                 jogo.trocar_turno()
 
         jogo.desenhar_tudo(TELA)
         pygame.display.flip()
