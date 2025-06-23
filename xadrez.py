@@ -136,11 +136,12 @@ class Rei(Peca):
 
 # --- CLASSE PRINCIPAL DO JOGO ---
 class Jogo:
-    def __init__(self):
-        # ... (conteúdo de __init__ não muda)
+    def __init__(self, modo_ia=True, cor_ia='b'): # Adicionado modo_ia e cor_ia
         self.tabuleiro, self.peca_selecionada, self.turno, self.movimentos_validos = [], None, 'w', []
         self.pos_rei_w, self.pos_rei_b = (7, 4), (0, 4)
         self.game_over, self.status_texto = False, ""
+        self.modo_ia = modo_ia
+        self.cor_ia = cor_ia
         self.criar_tabuleiro()
 
     def criar_tabuleiro(self):
@@ -310,20 +311,137 @@ class Jogo:
         pos_rei = self.pos_rei_w if cor == 'w' else self.pos_rei_b
         return self.is_square_under_attack(pos_rei[0], pos_rei[1], 'b' if cor == 'w' else 'w')
 
+    def fazer_movimento_ia(self):
+        if self.game_over or self.turno != self.cor_ia:
+            return
+
+        import random
+        todos_movimentos_possiveis = []
+        pecas_ia = []
+
+        # Coleta todas as peças da IA
+        for r in range(LINHAS):
+            for c in range(COLUNAS):
+                peca = self.tabuleiro[r][c]
+                if peca is not None and peca.cor == self.cor_ia:
+                    pecas_ia.append(peca)
+
+        random.shuffle(pecas_ia) # Embaralha as peças para adicionar mais aleatoriedade
+
+        for peca in pecas_ia:
+            movimentos_brutos = peca.get_movimentos_validos(self.tabuleiro)
+            # Adiciona movimentos de roque se a peça for um Rei
+            if isinstance(peca, Rei):
+                movimentos_brutos.extend(self._get_movimentos_roque(peca))
+
+            movimentos_legais_peca = self._filtrar_movimentos_ilegais(peca, movimentos_brutos)
+
+            if movimentos_legais_peca:
+                # Prioriza capturas ou movimentos que resultem em xeque
+                for mov in movimentos_legais_peca:
+                    # Simula o movimento para verificar se é uma captura ou xeque
+                    tabuleiro_temp = copy.deepcopy(self.tabuleiro)
+                    peca_original_temp = tabuleiro_temp[peca.linha][peca.coluna]
+
+                    # Lógica de captura
+                    peca_capturada = tabuleiro_temp[mov[0]][mov[1]]
+
+                    # Simula o movimento no tabuleiro temporário
+                    tabuleiro_temp[mov[0]][mov[1]] = peca_original_temp
+                    tabuleiro_temp[peca.linha][peca.coluna] = None
+
+                    # Verifica se o movimento resulta em xeque no oponente
+                    cor_oponente = 'w' if self.cor_ia == 'b' else 'b'
+                    pos_rei_oponente_original = self.pos_rei_w if cor_oponente == 'w' else self.pos_rei_b
+
+                    # Atualiza a posição do rei se ele for movido pela IA (não deveria acontecer aqui, mas por segurança)
+                    pos_rei_ia_temp = self.pos_rei_b if self.cor_ia == 'b' else self.pos_rei_w
+                    if isinstance(peca_original_temp, Rei):
+                        pos_rei_ia_temp = (mov[0], mov[1])
+
+                    # Verifica xeque no oponente
+                    xeque_no_oponente = self.is_square_under_attack(pos_rei_oponente_original[0], pos_rei_oponente_original[1], self.cor_ia, tabuleiro_temp)
+
+                    if peca_capturada is not None or xeque_no_oponente:
+                        # Movimento prioritário encontrado
+                        self.peca_selecionada = peca
+                        self.movimentos_validos = [mov] # Apenas este movimento é considerado
+                        if self._mover(mov[0], mov[1]):
+                            return # Movimento feito
+                        # Se _mover falhar por alguma razão (não deveria), continua procurando
+
+                # Se nenhum movimento prioritário foi feito, adiciona todos os legais da peça
+                for mov in movimentos_legais_peca:
+                    todos_movimentos_possiveis.append({'peca': peca, 'movimento': mov})
+
+        if not todos_movimentos_possiveis:
+            # Se não houver movimentos legais (xeque-mate ou afogamento pela IA, improvável com lógica simples)
+            self.verificar_fim_de_jogo() # Apenas para garantir que o estado do jogo seja atualizado
+            return
+
+        # Escolhe um movimento aleatório entre os coletados (que não são capturas/xeques prioritários)
+        escolha = random.choice(todos_movimentos_possiveis)
+        self.peca_selecionada = escolha['peca']
+        self.movimentos_validos = [escolha['movimento']] # Define como o único movimento válido para _mover
+
+        if self._mover(escolha['movimento'][0], escolha['movimento'][1]):
+            pass # Movimento realizado com sucesso
+        else:
+            # Isso não deveria acontecer se a lógica de movimentos legais estiver correta
+            print(f"IA tentou um movimento ilegal: {escolha['peca'].__class__.__name__} de ({escolha['peca'].linha},{escolha['peca'].coluna}) para {escolha['movimento']}")
+            # Como fallback, tenta um movimento completamente aleatório se o anterior falhar
+            # (Esta parte pode ser removida se a confiança na geração de movimentos for alta)
+            if self._get_todos_movimentos_legais(self.cor_ia): # Verifica se ainda há algum movimento
+                movimento_aleatorio_fallback = random.choice(self._get_todos_movimentos_legais(self.cor_ia))
+
+                # Encontrar a peça correspondente ao movimento aleatório
+                peca_para_fallback = None
+                for r_idx, r_val in enumerate(self.tabuleiro):
+                    for c_idx, p_val in enumerate(r_val):
+                        if p_val and p_val.cor == self.cor_ia:
+                            # Verifica se algum dos movimentos legais desta peça é o movimento_aleatorio_fallback
+                            movs_peca_fallback = self._filtrar_movimentos_ilegais(p_val, p_val.get_movimentos_validos(self.tabuleiro))
+                            if isinstance(p_val, Rei): # Adiciona roque para o rei
+                                movs_peca_fallback.extend(self._filtrar_movimentos_ilegais(p_val, self._get_movimentos_roque(p_val)))
+
+                            if movimento_aleatorio_fallback in movs_peca_fallback:
+                                peca_para_fallback = p_val
+                                break
+                    if peca_para_fallback:
+                        break
+
+                if peca_para_fallback:
+                    self.peca_selecionada = peca_para_fallback
+                    self.movimentos_validos = [movimento_aleatorio_fallback]
+                    self._mover(movimento_aleatorio_fallback[0], movimento_aleatorio_fallback[1])
+
 
 # --- LOOP PRINCIPAL ---
 # (Não muda)
 def main():
-    rodando, clock, jogo = True, pygame.time.Clock(), Jogo()
+    rodando, clock, jogo = True, pygame.time.Clock(), Jogo(modo_ia=True, cor_ia='b') # IA joga com as pretas por padrão
     while rodando:
         clock.tick(60)
+
+        turno_jogador_humano = jogo.turno != jogo.cor_ia or not jogo.modo_ia
+
         for evento in pygame.event.get():
-            if evento.type == pygame.QUIT: rodando = False
-            if not jogo.game_over:
+            if evento.type == pygame.QUIT:
+                rodando = False
+            if not jogo.game_over and turno_jogador_humano:
                 if evento.type == pygame.MOUSEBUTTONDOWN:
                     pos_x, pos_y = pygame.mouse.get_pos()
                     linha, coluna = pos_y // TAMANHO_QUADRADO, pos_x // TAMANHO_QUADRADO
-                    jogo.selecionar(linha, coluna)
+                    if jogo.selecionar(linha, coluna): # selecionar agora retorna True se um movimento foi feito e o turno trocado
+                        # O turno já foi trocado dentro de selecionar (ou _mover que chama trocar_turno)
+                        pass
+
+        if not jogo.game_over and jogo.modo_ia and jogo.turno == jogo.cor_ia:
+            jogo.fazer_movimento_ia()
+            # Se a IA fez um movimento, ela precisa trocar o turno e verificar fim de jogo
+            if not jogo.game_over: # A IA pode ter feito um movimento de xeque-mate
+                 jogo.trocar_turno() # trocar_turno já chama verificar_fim_de_jogo
+
         jogo.desenhar_tudo(TELA)
         pygame.display.flip()
     pygame.quit()
